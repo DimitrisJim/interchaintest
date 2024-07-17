@@ -2,13 +2,15 @@ package polkadot
 
 import (
 	"cosmossdk.io/math"
-	gsrpc "github.com/misko9/go-substrate-rpc-client/v4"
-	gstypes "github.com/misko9/go-substrate-rpc-client/v4/types"
+    //	gsrpc "github.com/misko9/go-substrate-rpc-client/v4"
+	// gstypes "github.com/misko9/go-substrate-rpc-client/v4/types"
 )
 
 // GetBalance fetches the current balance for a specific account address using the SubstrateAPI
-func GetBalance(api *gsrpc.SubstrateAPI, address string) (math.Int, error) {
-	meta, err := api.RPC.State.GetMetadataLatest()
+func GetBalance(api any, address string) (math.Int, error) {
+    return math.Int{}, nil
+	/*
+    meta, err := api.RPC.State.GetMetadataLatest()
 	if err != nil {
 		return math.Int{}, err
 	}
@@ -31,4 +33,5 @@ func GetBalance(api *gsrpc.SubstrateAPI, address string) (math.Int, error) {
 	}
 
 	return math.NewIntFromBigInt(accountInfo.Data.Free.Int), nil
+    */
 }
