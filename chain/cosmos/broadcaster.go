@@ -15,8 +15,8 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
-	"github.com/strangelove-ventures/interchaintest/v8/dockerutil"
-	"github.com/strangelove-ventures/interchaintest/v8/testutil"
+	"github.com/strangelove-ventures/interchaintest/v9/dockerutil"
+	"github.com/strangelove-ventures/interchaintest/v9/testutil"
 )
 
 type ClientContextOpt func(clientContext client.Context) client.Context
@@ -122,6 +122,7 @@ func (b *Broadcaster) GetClientContext(ctx context.Context, user User) (client.C
 	for _, opt := range b.clientContextOptions {
 		clientContext = opt(clientContext)
 	}
+
 	return clientContext, nil
 }
 
@@ -135,9 +136,9 @@ func (b *Broadcaster) GetTxResponseBytes(ctx context.Context, user User) ([]byte
 
 // UnmarshalTxResponseBytes accepts the sdk.TxResponse bytes and unmarshalls them into an
 // instance of sdk.TxResponse.
-func (b *Broadcaster) UnmarshalTxResponseBytes(ctx context.Context, bytes []byte) (sdk.TxResponse, error) {
+func (b *Broadcaster) UnmarshalTxResponseBytes(ctx context.Context, cc client.Context, bytes []byte) (sdk.TxResponse, error) {
 	resp := sdk.TxResponse{}
-	if err := b.chain.cfg.EncodingConfig.Codec.UnmarshalJSON(bytes, &resp); err != nil {
+	if err := cc.Codec.UnmarshalJSON(bytes, &resp); err != nil {
 		return sdk.TxResponse{}, err
 	}
 
@@ -168,7 +169,6 @@ func (b *Broadcaster) defaultClientContext(fromUser User, sdkAdd sdk.AccAddress)
 		WithKeyring(kr).
 		WithBroadcastMode(flags.BroadcastSync).
 		WithCodec(b.chain.cfg.EncodingConfig.Codec)
-
 	// NOTE: the returned context used to have .WithHomeDir(cn.Home),
 	// but that field no longer exists and the test against Broadcaster still passes without it.
 }
@@ -227,7 +227,7 @@ func BroadcastTx(ctx context.Context, broadcaster *Broadcaster, broadcastingUser
 		return sdk.TxResponse{}, err
 	}
 
-	respWithTxHash, err := broadcaster.UnmarshalTxResponseBytes(ctx, txBytes)
+	respWithTxHash, err := broadcaster.UnmarshalTxResponseBytes(ctx, cc, txBytes)
 	if err != nil {
 		return sdk.TxResponse{}, err
 	}

@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/strangelove-ventures/interchaintest/v8/chain/penumbra"
-	"github.com/strangelove-ventures/interchaintest/v8/ibc"
+	"github.com/strangelove-ventures/interchaintest/v9/ibc"
 )
 
 // ErrPclientdInitialization is returned if the CreateClientNode call fails while initializing a new instance of
@@ -21,12 +20,12 @@ var ErrPclientdInitialization = fmt.Errorf("failed to initialize new pclientd in
 // after a new test user has been generated via one of the GetAndFundTestUser helper functions or a call to the
 // chain.CreateKey or chain.RecoverKey methods.
 func CreatePenumbraClient(ctx context.Context, c ibc.Chain, keyName string) error {
-	if pen, ok := c.(*penumbra.PenumbraChain); ok {
-		err := pen.CreateClientNode(ctx, keyName)
-		if err != nil {
-			return fmt.Errorf("%w for keyname %s: %w", ErrPclientdInitialization, keyName, err)
-		}
-	}
+	//if pen, ok := c.(*penumbra.PenumbraChain); ok {
+	//	err := pen.CreateClientNode(ctx, keyName)
+	//	if err != nil {
+	//		return fmt.Errorf("%w for keyname %s: %w", ErrPclientdInitialization, keyName, err)
+	//	}
+	//}
 
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/avast/retry-go/v4"
 	"hash/fnv"
 	"math/rand"
 	"os"
@@ -16,7 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/avast/retry-go/v4"
+	banktypes "cosmossdk.io/x/bank/types"
+	stakingtypes "cosmossdk.io/x/staking/types"
 	tmjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/p2p"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
@@ -29,8 +31,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authTx "github.com/cosmos/cosmos-sdk/x/auth/tx"
-	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	volumetypes "github.com/docker/docker/api/types/volume"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -39,11 +39,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	icatypes "github.com/cosmos/ibc-go/v8/modules/apps/27-interchain-accounts/types"
-	"github.com/strangelove-ventures/interchaintest/v8/blockdb"
-	"github.com/strangelove-ventures/interchaintest/v8/dockerutil"
-	"github.com/strangelove-ventures/interchaintest/v8/ibc"
-	"github.com/strangelove-ventures/interchaintest/v8/testutil"
+	icatypes "github.com/cosmos/ibc-go/v9/modules/apps/27-interchain-accounts/types"
+	"github.com/strangelove-ventures/interchaintest/v9/blockdb"
+	"github.com/strangelove-ventures/interchaintest/v9/dockerutil"
+	"github.com/strangelove-ventures/interchaintest/v9/ibc"
+	"github.com/strangelove-ventures/interchaintest/v9/testutil"
 )
 
 // ChainNode represents a node in the test network that is being created
@@ -127,7 +127,7 @@ func (tn *ChainNode) NewClient(addr string) error {
 	}
 
 	httpClient.Timeout = 10 * time.Second
-	rpcClient, err := rpchttp.NewWithClient(addr, "/websocket", httpClient)
+	rpcClient, err := rpchttp.NewWithClient(addr, httpClient)
 	if err != nil {
 		return err
 	}
@@ -431,7 +431,7 @@ func (tn *ChainNode) FindTxs(ctx context.Context, height int64) ([]blockdb.Tx, e
 		}
 		newTx.Data = b
 
-		rTx := blockRes.TxsResults[i]
+		rTx := blockRes.TxResults[i]
 
 		newTx.Events = make([]blockdb.Event, len(rTx.Events))
 		for j, e := range rTx.Events {
@@ -691,6 +691,10 @@ func (tn *ChainNode) RecoverKey(ctx context.Context, keyName, mnemonic string) e
 
 	_, _, err := tn.Exec(ctx, command, nil)
 	return err
+}
+
+func (tn *ChainNode) IsAboveSDK50(ctx context.Context) bool {
+	return tn.HasCommand(ctx, "genesis") && !tn.HasCommand(ctx, "export")
 }
 
 func (tn *ChainNode) IsAboveSDK47(ctx context.Context) bool {
@@ -960,11 +964,16 @@ func (tn *ChainNode) ExportState(ctx context.Context, height int64) (string, err
 		doc              = "state_export.json"
 		docPath          = path.Join(tn.HomeDir(), doc)
 		isNewerThanSdk47 = tn.IsAboveSDK47(ctx)
+		isNewerThanSdk50 = tn.IsAboveSDK50(ctx)
 		command          = []string{"export", "--height", fmt.Sprint(height), "--home", tn.HomeDir()}
 	)
 
 	if isNewerThanSdk47 {
 		command = append(command, "--output-document", docPath)
+	}
+
+	if isNewerThanSdk50 {
+		command = append([]string{"genesis"}, command...)
 	}
 
 	stdout, stderr, err := tn.ExecBin(ctx, command...)
@@ -1004,13 +1013,15 @@ func (tn *ChainNode) CreateNodeContainer(ctx context.Context) error {
 
 	var cmd []string
 	if chainCfg.NoHostMount {
-		startCmd := fmt.Sprintf("cp -r %s %s_nomnt && %s start --home %s_nomnt --x-crisis-skip-assert-invariants", tn.HomeDir(), tn.HomeDir(), chainCfg.Bin, tn.HomeDir())
+		//startCmd := fmt.Sprintf("cp -r %s %s_nomnt && %s start --home %s_nomnt --x-crisis-skip-assert-invariants", tn.HomeDir(), tn.HomeDir(), chainCfg.Bin, tn.HomeDir())
+		startCmd := fmt.Sprintf("cp -r %s %s_nomnt && %s start --home %s_nomnt", tn.HomeDir(), tn.HomeDir(), chainCfg.Bin, tn.HomeDir())
 		if len(chainCfg.AdditionalStartArgs) > 0 {
 			startCmd = fmt.Sprintf("%s %s", startCmd, chainCfg.AdditionalStartArgs)
 		}
 		cmd = []string{"sh", "-c", startCmd}
 	} else {
-		cmd = []string{chainCfg.Bin, "start", "--home", tn.HomeDir(), "--x-crisis-skip-assert-invariants"}
+		//cmd = []string{chainCfg.Bin, "start", "--home", tn.HomeDir(), "--x-crisis-skip-assert-invariants"}
+		cmd = []string{chainCfg.Bin, "start", "--home", tn.HomeDir()}
 		if len(chainCfg.AdditionalStartArgs) > 0 {
 			cmd = append(cmd, chainCfg.AdditionalStartArgs...)
 		}
@@ -1368,7 +1379,7 @@ func (tn *ChainNode) SendICABankTransfer(ctx context.Context, connectionID, from
 	fromAddress := sdk.MustAccAddressFromBech32(fromAddr)
 	toAddress := sdk.MustAccAddressFromBech32(amount.Address)
 	coin := sdk.NewCoin(amount.Denom, amount.Amount)
-	msg := banktypes.NewMsgSend(fromAddress, toAddress, sdk.NewCoins(coin))
+	msg := banktypes.NewMsgSend(fromAddress.String(), toAddress.String(), sdk.NewCoins(coin))
 	msgs := []sdk.Msg{msg}
 
 	ir := tn.Chain.Config().EncodingConfig.InterfaceRegistry
